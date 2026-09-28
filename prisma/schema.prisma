@@ -1,0 +1,101 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String    @id @default(cuid())
+  email        String    @unique
+  passwordHash String
+  name         String
+  bookings     Booking[]
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+}
+
+model DiagnosticCentre {
+  id        String           @id @default(cuid())
+  name      String
+  location  String
+  tests     DiagnosticTest[]
+  bookings  Booking[]
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+
+  @@index([location])
+}
+
+model DiagnosticTest {
+  id          String           @id @default(cuid())
+  name        String
+  description String?
+  price       Decimal          @db.Decimal(10, 2)
+  centreId    String
+  centre      DiagnosticCentre @relation(fields: [centreId], references: [id], onDelete: Cascade)
+  bookings    Booking[]
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  @@unique([centreId, name])
+  @@index([centreId])
+}
+
+enum BookingStatus {
+  PENDING
+  CONFIRMED
+  FAILED
+  CANCELLED
+}
+
+model Booking {
+  id            String           @id @default(cuid())
+  userId        String
+  user          User             @relation(fields: [userId], references: [id])
+  testId        String
+  test          DiagnosticTest   @relation(fields: [testId], references: [id])
+  centreId      String
+  centre        DiagnosticCentre @relation(fields: [centreId], references: [id])
+  appointmentAt DateTime
+  amount        Decimal          @db.Decimal(10, 2)
+  status        BookingStatus    @default(PENDING)
+  payment       Payment?
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+
+  @@index([userId, appointmentAt])
+  @@index([status])
+}
+
+enum PaymentStatus {
+  SUCCESS
+  FAILED
+}
+
+model Payment {
+  id        String        @id @default(cuid())
+  bookingId String        @unique
+  booking   Booking       @relation(fields: [bookingId], references: [id])
+  amount    Decimal       @db.Decimal(10, 2)
+  status    PaymentStatus
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+}
+
+/// Idempotency ledger for provider callbacks. eventId is the provider's id.
+model WebhookEvent {
+  id        String   @id @default(cuid())
+  eventId   String   @unique
+  bookingId String?
+  paymentId String?
+  status    String
+  applied   Boolean  @default(false)
+  payload   Json
+  result    Json
+  createdAt DateTime @default(now())
+
+  @@index([bookingId])
+}
